@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="classlimit">
+	<schema id="com.tomasps.classlimit" path="/com/tomasps/classlimit/">
+		<key name="subjects" type="a(siii)">
+			<default>[]</default>
+			<summary>Subject list</summary>
+			<description>List of subjects with name, weekly hours, current skips, and allowed skips</description>
+		</key>
+		<key name="required-attendance" type="i">
+			<default>80</default>
+			<summary>Required attendance percentage</summary>
+			<description>Minimum attendance percentage required</description>
+		</key>
+		<key name="total-weeks" type="i">
+			<default>15</default>
+			<summary>Total weeks in semester</summary>
+			<description>Number of weeks in the academic semester</description>
+		</key>
+		<key name="session-hours" type="i">
+			<default>1</default>
+			<summary>Hours per session</summary>
+			<description>Number of hours per session for skip calculation</description>
+		</key>
+		<key name="onboarding-completed" type="b">
+			<default>false</default>
+			<summary>Onboarding completed</summary>
+			<description>Whether the user has completed the onboarding tutorial</description>
+		</key>
+	</schema>
+</schemalist>

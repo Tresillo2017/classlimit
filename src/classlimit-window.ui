@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="Adw" version="1.0"/>
+  <template class="ClasslimitWindow" parent="AdwApplicationWindow">
+    <property name="title" translatable="yes">ClassLimit</property>
+    <property name="default-width">800</property>
+    <property name="default-height">600</property>
+    <property name="content">
+      <object class="AdwToolbarView" id="toolbar_view">
+        <child type="top">
+          <object class="AdwHeaderBar" id="header_bar">
+            <child type="end">
+              <object class="GtkMenuButton">
+                <property name="primary">True</property>
+                <property name="icon-name">open-menu-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Main Menu</property>
+                <property name="menu-model">primary_menu</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="content">
+          <object class="AdwClamp">
+            <property name="maximum-size">900</property>
+            <property name="tightening-threshold">600</property>
+            <property name="child">
+              <object class="GtkBox" id="main_box">
+                <property name="orientation">vertical</property>
+                <property name="spacing">24</property>
+                <property name="margin-top">24</property>
+                <property name="margin-bottom">24</property>
+                <property name="margin-start">12</property>
+                <property name="margin-end">12</property>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title" translatable="yes">Subjects</property>
+                    <property name="description" translatable="yes">Add your subjects and track attendance</property>
+                    <child>
+                      <object class="GtkScrolledWindow" id="subjects_scroll">
+                        <property name="min-content-height">200</property>
+                        <property name="vexpand">true</property>
+                        <style><class name="card"/></style>
+                        <property name="child">
+                          <object class="GtkListBox" id="subjects_list">
+                            <property name="selection-mode">none</property>
+                            <style><class name="boxed-list"/></style>
+                          </object>
+                        </property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Add New Subject</property>
+                        <child>
+                          <object class="GtkEntry" id="subject_name_entry">
+                            <property name="placeholder-text" translatable="yes">Subject name</property>
+                            <property name="valign">center</property>
+                            <property name="width-chars">20</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">horizontal</property>
+                            <property name="spacing">6</property>
+                            <property name="valign">center</property>
+                            <child>
+                              <object class="GtkSpinButton" id="subject_hours_spin">
+                                <property name="valign">center</property>
+                                <property name="adjustment">
+                                  <object class="GtkAdjustment">
+                                    <property name="lower">0</property>
+                                    <property name="upper">40</property>
+                                    <property name="step-increment">1</property>
+                                  </object>
+                                </property>
+                                <property name="digits">0</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="label" translatable="yes">h/week</property>
+                                <style><class name="dim-label"/></style>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="add_subject_button">
+                            <property name="icon-name">list-add-symbolic</property>
+                            <property name="valign">center</property>
+                            <property name="tooltip-text" translatable="yes">Add subject</property>
+                            <style><class name="circular"/></style>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title" translatable="yes">Configuration</property>
+                    <property name="description" translatable="yes">Set your attendance requirements</property>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Required Attendance</property>
+                        <property name="subtitle" translatable="yes">Minimum attendance percentage required</property>
+                        <child>
+                          <object class="GtkSpinButton" id="percent_spin">
+                            <property name="valign">center</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">50</property>
+                                <property name="upper">100</property>
+                                <property name="step-increment">1</property>
+                                <property name="value">80</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Total Weeks</property>
+                        <property name="subtitle" translatable="yes">Number of weeks in the semester</property>
+                        <child>
+                          <object class="GtkSpinButton" id="weeks_spin">
+                            <property name="valign">center</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">1</property>
+                                <property name="upper">60</property>
+                                <property name="step-increment">1</property>
+                                <property name="value">15</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title" translatable="yes">Hours Per Session</property>
+                        <property name="subtitle" translatable="yes">Calculate skips in sessions instead of hours</property>
+                        <child>
+                          <object class="GtkSpinButton" id="session_hours_spin">
+                            <property name="valign">center</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">1</property>
+                                <property name="upper">10</property>
+                                <property name="step-increment">1</property>
+                                <property name="value">1</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton" id="calculate_button">
+                    <property name="label" translatable="yes">Calculate Allowed Skips</property>
+                    <property name="halign">center</property>
+                    <style><class name="suggested-action"/><class name="pill"/></style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkRevealer" id="results_revealer">
+                    <property name="transition-type">slide-down</property>
+                    <property name="child">
+                      <object class="AdwPreferencesGroup">
+                        <property name="title" translatable="yes">Results</property>
+                        <property name="description" translatable="yes">Allowed skips per subject</property>
+                        <child>
+                          <object class="GtkListBox" id="results_list">
+                            <property name="selection-mode">none</property>
+                            <style><class name="boxed-list"/></style>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </property>
+  </template>
+  <menu id="primary_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">_Import Subjects</attribute>
+        <attribute name="action">win.import</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Export Subjects</attribute>
+        <attribute name="action">win.export</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">_Reset All Data</attribute>
+        <attribute name="action">win.reset-all</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_Keyboard Shortcuts</attribute>
+        <attribute name="action">app.shortcuts</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">_About ClassLimit</attribute>
+        <attribute name="action">app.about</attribute>
+      </item>
+    </section>
+  </menu>
+</interface>

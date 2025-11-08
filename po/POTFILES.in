@@ -1,0 +1,8 @@
+# List of source files containing translatable strings.
+# Please keep this file sorted alphabetically.
+data/com.tomasps.classlimit.desktop.in
+data/com.tomasps.classlimit.metainfo.xml.in
+data/com.tomasps.classlimit.gschema.xml
+src/main.c
+src/classlimit-window.c
+src/classlimit-window.ui

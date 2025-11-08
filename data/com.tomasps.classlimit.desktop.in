@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=classlimit
+Exec=classlimit
+Icon=com.tomasps.classlimit
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=GTK;
+StartupNotify=true
+DBusActivatable=true
