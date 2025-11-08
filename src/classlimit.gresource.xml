@@ -3,5 +3,7 @@
   <gresource prefix="/com/tomasps/classlimit">
     <file preprocess="xml-stripblanks">classlimit-window.ui</file>
     <file preprocess="xml-stripblanks">shortcuts-dialog.ui</file>
+    <file preprocess="xml-stripblanks">onboarding-dialog.ui</file>
+    <file>style.css</file>
   </gresource>
 </gresources>

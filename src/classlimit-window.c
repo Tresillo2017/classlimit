@@ -29,7 +29,7 @@ struct _ClasslimitWindow
 	AdwApplicationWindow parent_instance;
 
 	/* Template widgets */
-	GtkBox         *main_box;
+	AdwViewStack   *view_stack;
 	GtkListBox     *subjects_list;
 	GtkEntry       *subject_name_entry;
 	GtkSpinButton  *subject_hours_spin;
@@ -38,8 +38,9 @@ struct _ClasslimitWindow
 	GtkSpinButton  *weeks_spin;
 	GtkSpinButton  *session_hours_spin;
 	GtkButton      *calculate_button;
-	GtkRevealer    *results_revealer;
+	GtkStack       *results_stack;
 	GtkListBox     *results_list;
+	GtkWidget      *results_page;
 
 	/* Settings */
 	GSettings      *settings;
@@ -65,6 +66,20 @@ static void subject_free (Subject *s) {
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(Subject, subject_free)
 
+static gboolean
+animate_row_opacity (gpointer data)
+{
+	GtkWidget *widget = GTK_WIDGET (data);
+	gdouble opacity = gtk_widget_get_opacity (widget);
+	opacity += 0.1;
+	if (opacity >= 1.0) {
+		gtk_widget_set_opacity (widget, 1.0);
+		return G_SOURCE_REMOVE;
+	}
+	gtk_widget_set_opacity (widget, opacity);
+	return G_SOURCE_CONTINUE;
+}
+
 static void
 on_remove_subject_clicked (GtkButton *b, gpointer user_data)
 {
@@ -76,8 +91,8 @@ on_remove_subject_clicked (GtkButton *b, gpointer user_data)
 	parent = gtk_widget_get_parent (row);
 	if (GTK_IS_LIST_BOX (parent)) {
 		gtk_list_box_remove (GTK_LIST_BOX (parent), row);
-		/* Auto-recalculate after removal if results are visible */
-		if (gtk_revealer_get_reveal_child (self->results_revealer))
+		/* Auto-recalculate after removal if currently on results page */
+		if (adw_view_stack_get_visible_child (self->view_stack) == self->results_page)
 			recalc_results (self);
 	}
 }
@@ -87,9 +102,8 @@ on_skip_increment_clicked (GtkButton *b, gpointer user_data)
 {
 	GtkWidget *row = gtk_widget_get_ancestor (GTK_WIDGET (b), GTK_TYPE_LIST_BOX_ROW);
 	Subject *s;
-	GtkWidget *box;
-	GtkWidget *skip_label;
-	char buf[64];
+	GtkWidget *status_image;
+	char subtitle[128];
 	int remaining;
 	
 	if (!row) return;
@@ -98,24 +112,22 @@ on_skip_increment_clicked (GtkButton *b, gpointer user_data)
 	
 	s->current_skips++;
 	
-	/* Update the skip label */
-	box = gtk_list_box_row_get_child (GTK_LIST_BOX_ROW (row));
-	skip_label = g_object_get_data (G_OBJECT (box), "skip-label");
-	if (skip_label) {
-		remaining = s->allowed_skips - s->current_skips;
-		g_snprintf (buf, sizeof buf, _("Skipped: %d | Remaining: %d"), s->current_skips, remaining);
-		gtk_label_set_text (GTK_LABEL (skip_label), buf);
-		
-		/* Color code based on remaining skips */
-		gtk_widget_remove_css_class (skip_label, "success");
-		gtk_widget_remove_css_class (skip_label, "warning");
-		gtk_widget_remove_css_class (skip_label, "error");
-		if (remaining < 0)
-			gtk_widget_add_css_class (skip_label, "error");
+	remaining = s->allowed_skips - s->current_skips;
+	if (s->allowed_skips > 0)
+		g_snprintf (subtitle, sizeof subtitle, _("%d h/week • Skipped: %d • Remaining: %d"), s->weekly_hours, s->current_skips, remaining);
+	else
+		g_snprintf (subtitle, sizeof subtitle, _("%d h/week • Skipped: %d"), s->weekly_hours, s->current_skips);
+	adw_action_row_set_subtitle (ADW_ACTION_ROW (row), subtitle);
+	status_image = g_object_get_data (G_OBJECT (row), "status-image");
+	if (GTK_IS_WIDGET (status_image)) {
+		if (s->allowed_skips == 0)
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "view-statistics-symbolic");
+		else if (remaining < 0)
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "dialog-error-symbolic");
 		else if (remaining <= 2)
-			gtk_widget_add_css_class (skip_label, "warning");
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "dialog-warning-symbolic");
 		else
-			gtk_widget_add_css_class (skip_label, "success");
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "emblem-ok-symbolic");
 	}
 }
 
@@ -124,9 +136,8 @@ on_skip_decrement_clicked (GtkButton *b, gpointer user_data)
 {
 	GtkWidget *row = gtk_widget_get_ancestor (GTK_WIDGET (b), GTK_TYPE_LIST_BOX_ROW);
 	Subject *s;
-	GtkWidget *box;
-	GtkWidget *skip_label;
-	char buf[64];
+	GtkWidget *status_image;
+	char subtitle[128];
 	int remaining;
 	
 	if (!row) return;
@@ -136,24 +147,22 @@ on_skip_decrement_clicked (GtkButton *b, gpointer user_data)
 	if (s->current_skips > 0)
 		s->current_skips--;
 	
-	/* Update the skip label */
-	box = gtk_list_box_row_get_child (GTK_LIST_BOX_ROW (row));
-	skip_label = g_object_get_data (G_OBJECT (box), "skip-label");
-	if (skip_label) {
-		remaining = s->allowed_skips - s->current_skips;
-		g_snprintf (buf, sizeof buf, _("Skipped: %d | Remaining: %d"), s->current_skips, remaining);
-		gtk_label_set_text (GTK_LABEL (skip_label), buf);
-		
-		/* Color code based on remaining skips */
-		gtk_widget_remove_css_class (skip_label, "success");
-		gtk_widget_remove_css_class (skip_label, "warning");
-		gtk_widget_remove_css_class (skip_label, "error");
-		if (remaining < 0)
-			gtk_widget_add_css_class (skip_label, "error");
+	remaining = s->allowed_skips - s->current_skips;
+	if (s->allowed_skips > 0)
+		g_snprintf (subtitle, sizeof subtitle, _("%d h/week • Skipped: %d • Remaining: %d"), s->weekly_hours, s->current_skips, remaining);
+	else
+		g_snprintf (subtitle, sizeof subtitle, _("%d h/week • Skipped: %d"), s->weekly_hours, s->current_skips);
+	adw_action_row_set_subtitle (ADW_ACTION_ROW (row), subtitle);
+	status_image = g_object_get_data (G_OBJECT (row), "status-image");
+	if (GTK_IS_WIDGET (status_image)) {
+		if (s->allowed_skips == 0)
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "view-statistics-symbolic");
+		else if (remaining < 0)
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "dialog-error-symbolic");
 		else if (remaining <= 2)
-			gtk_widget_add_css_class (skip_label, "warning");
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "dialog-warning-symbolic");
 		else
-			gtk_widget_add_css_class (skip_label, "success");
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "emblem-ok-symbolic");
 	}
 }
 
@@ -162,9 +171,8 @@ on_skip_reset_clicked (GtkButton *b, gpointer user_data)
 {
 	GtkWidget *row = gtk_widget_get_ancestor (GTK_WIDGET (b), GTK_TYPE_LIST_BOX_ROW);
 	Subject *s;
-	GtkWidget *box;
-	GtkWidget *skip_label;
-	char buf[64];
+	GtkWidget *status_image;
+	char subtitle[128];
 	
 	if (!row) return;
 	s = g_object_get_data (G_OBJECT (row), "subject");
@@ -172,94 +180,77 @@ on_skip_reset_clicked (GtkButton *b, gpointer user_data)
 	
 	s->current_skips = 0;
 	
-	/* Update the skip label */
-	box = gtk_list_box_row_get_child (GTK_LIST_BOX_ROW (row));
-	skip_label = g_object_get_data (G_OBJECT (box), "skip-label");
-	if (skip_label) {
-		g_snprintf (buf, sizeof buf, _("Skipped: %d | Remaining: %d"), s->current_skips, s->allowed_skips);
-		gtk_label_set_text (GTK_LABEL (skip_label), buf);
-		gtk_widget_remove_css_class (skip_label, "warning");
-		gtk_widget_remove_css_class (skip_label, "error");
-		gtk_widget_add_css_class (skip_label, "success");
+	if (s->allowed_skips > 0)
+		g_snprintf (subtitle, sizeof subtitle, _("%d h/week • Skipped: %d • Remaining: %d"), s->weekly_hours, s->current_skips, s->allowed_skips);
+	else
+		g_snprintf (subtitle, sizeof subtitle, _("%d h/week • Skipped: %d"), s->weekly_hours, s->current_skips);
+	adw_action_row_set_subtitle (ADW_ACTION_ROW (row), subtitle);
+	status_image = g_object_get_data (G_OBJECT (row), "status-image");
+	if (GTK_IS_WIDGET (status_image)) {
+		if (s->allowed_skips == 0)
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "view-statistics-symbolic");
+		else
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "emblem-ok-symbolic");
 	}
 }
 
 static GtkWidget *
 create_subject_row (Subject *s, ClasslimitWindow *self)
 {
-	GtkWidget *row = gtk_list_box_row_new ();
-	GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-	GtkWidget *top_box;
-	GtkWidget *name;
-	char hours_buf[64];
-	GtkWidget *hours;
-	GtkWidget *remove_btn;
-	GtkWidget *skip_box;
-	GtkWidget *skip_label;
+	GtkWidget *row = adw_action_row_new ();
+	GtkWidget *controls;
 	GtkWidget *btn_minus;
 	GtkWidget *btn_plus;
 	GtkWidget *btn_reset;
-	
-	/* Top row: name and hours */
-	top_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-	name = gtk_label_new (s->name);
-	gtk_widget_set_hexpand (name, TRUE);
-	gtk_label_set_xalign (GTK_LABEL (name), 0.0);
-	gtk_widget_add_css_class (name, "heading");
-	
-	g_snprintf (hours_buf, sizeof hours_buf, _("%d h/week"), s->weekly_hours);
-	hours = gtk_label_new (hours_buf);
-	gtk_widget_add_css_class (hours, "dim-label");
-	
-	remove_btn = gtk_button_new_from_icon_name ("user-trash-symbolic");
-	gtk_widget_set_tooltip_text (remove_btn, _("Remove subject"));
-	gtk_widget_add_css_class (remove_btn, "flat");
-	
-	gtk_box_append (GTK_BOX (top_box), name);
-	gtk_box_append (GTK_BOX (top_box), hours);
-	gtk_box_append (GTK_BOX (top_box), remove_btn);
-	
-	/* Bottom row: skip tracking */
-	skip_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	
-	skip_label = gtk_label_new (_("No calculation yet"));
-	gtk_widget_set_hexpand (skip_label, TRUE);
-	gtk_label_set_xalign (GTK_LABEL (skip_label), 0.0);
-	gtk_widget_add_css_class (skip_label, "caption");
-	g_object_set_data (G_OBJECT (box), "skip-label", skip_label);
-	
+	GtkWidget *remove_btn;
+	GtkWidget *status_image;
+	char subtitle[64];
+
+	adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row), s->name);
+	g_snprintf (subtitle, sizeof subtitle, _("%d h/week"), s->weekly_hours);
+	adw_action_row_set_subtitle (ADW_ACTION_ROW (row), subtitle);
+
+	/* Status indicator (updated after calculation) */
+	status_image = gtk_image_new_from_icon_name ("view-statistics-symbolic");
+	gtk_widget_add_css_class (status_image, "dim-label");
+	adw_action_row_add_suffix (ADW_ACTION_ROW (row), status_image);
+
+	/* Linked controls for skip tracking */
+	controls = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+	gtk_widget_add_css_class (controls, "linked");
+
 	btn_minus = gtk_button_new_from_icon_name ("list-remove-symbolic");
 	gtk_widget_set_tooltip_text (btn_minus, _("Decrease skip count"));
 	gtk_widget_add_css_class (btn_minus, "flat");
-	gtk_widget_add_css_class (btn_minus, "circular");
-	
+	adw_action_row_add_suffix (ADW_ACTION_ROW (row), controls);
+	gtk_box_append (GTK_BOX (controls), btn_minus);
+
 	btn_plus = gtk_button_new_from_icon_name ("list-add-symbolic");
 	gtk_widget_set_tooltip_text (btn_plus, _("Increase skip count"));
 	gtk_widget_add_css_class (btn_plus, "flat");
-	gtk_widget_add_css_class (btn_plus, "circular");
-	
+	gtk_box_append (GTK_BOX (controls), btn_plus);
+
 	btn_reset = gtk_button_new_from_icon_name ("edit-clear-all-symbolic");
 	gtk_widget_set_tooltip_text (btn_reset, _("Reset skip count"));
 	gtk_widget_add_css_class (btn_reset, "flat");
-	gtk_widget_add_css_class (btn_reset, "circular");
-	
-	gtk_box_append (GTK_BOX (skip_box), skip_label);
-	gtk_box_append (GTK_BOX (skip_box), btn_minus);
-	gtk_box_append (GTK_BOX (skip_box), btn_plus);
-	gtk_box_append (GTK_BOX (skip_box), btn_reset);
-	
-	gtk_box_append (GTK_BOX (box), top_box);
-	gtk_box_append (GTK_BOX (box), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
-	gtk_box_append (GTK_BOX (box), skip_box);
-	
-	gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (row), box);
-	g_object_set_data_full (G_OBJECT (row), "subject", s, (GDestroyNotify) subject_free);
+	gtk_box_append (GTK_BOX (controls), btn_reset);
 
+	/* Remove button at the end */
+	remove_btn = gtk_button_new_from_icon_name ("user-trash-symbolic");
+	gtk_widget_set_tooltip_text (remove_btn, _("Remove subject"));
+	gtk_widget_add_css_class (remove_btn, "flat");
+	adw_action_row_add_suffix (ADW_ACTION_ROW (row), remove_btn);
+
+	/* Data attachments */
+	g_object_set_data_full (G_OBJECT (row), "subject", s, (GDestroyNotify) subject_free);
+	g_object_set_data (G_OBJECT (row), "status-image", status_image);
+
+	/* Signals */
 	g_signal_connect (remove_btn, "clicked", G_CALLBACK (on_remove_subject_clicked), self);
 	g_signal_connect (btn_plus, "clicked", G_CALLBACK (on_skip_increment_clicked), self);
 	g_signal_connect (btn_minus, "clicked", G_CALLBACK (on_skip_decrement_clicked), self);
 	g_signal_connect (btn_reset, "clicked", G_CALLBACK (on_skip_reset_clicked), self);
-	
+
 	return row;
 }
 
@@ -312,6 +303,10 @@ recalc_results (ClasslimitWindow *self)
 	int total_allowed_all = 0;
 	int total_classes_all = 0;
 	int session_hours;
+	
+	/* Add subtle animation when recalculating */
+	gtk_widget_set_sensitive (GTK_WIDGET (self->calculate_button), FALSE);
+	
 	clear_results (self);
 	weeks = gtk_spin_button_get_value_as_int (self->weeks_spin);
 	required_pct = gtk_spin_button_get_value_as_int (self->percent_spin); /* attendance required */
@@ -323,86 +318,61 @@ recalc_results (ClasslimitWindow *self)
 	for (row = gtk_widget_get_first_child (GTK_WIDGET (self->subjects_list));
 		 row != NULL;
 		 row = gtk_widget_get_next_sibling (row)) {
-		Subject *s;
-		int total_classes;
-		int allowed_skip;
-		int total_sessions;
-		int allowed_skip_sessions;
-		char buf[256];
+		Subject *s = g_object_get_data (G_OBJECT (row), "subject");
 		GtkWidget *result_row;
-		GtkWidget *result_box;
-		GtkWidget *lbl_main;
-		GtkWidget *lbl_detail;
+		char buf[256];
 		char detail[128];
+		int total_classes, allowed_skip, total_sessions, allowed_skip_sessions;
 		int remaining;
-		GtkWidget *subject_box;
-		GtkWidget *skip_label;
-		char skip_buf[64];
 
-		s = g_object_get_data (G_OBJECT (row), "subject");
 		if (!s) continue;
 		total_classes = s->weekly_hours * weeks;
 		allowed_skip = (total_classes * allowed_pct) / 100; /* floor */
 		total_sessions = total_classes / session_hours;
 		allowed_skip_sessions = allowed_skip / session_hours;
-		
-		/* Store calculated values in subject */
+
+		/* Store calculated values */
 		s->total_classes = total_classes;
 		s->allowed_skips = (session_hours > 1) ? allowed_skip_sessions : allowed_skip;
-		
+		remaining = s->allowed_skips - s->current_skips;
+
+		result_row = adw_action_row_new ();
+		g_snprintf (buf, sizeof buf, _("%s"), s->name);
+		adw_preferences_row_set_title (ADW_PREFERENCES_ROW (result_row), buf);
+		if (session_hours > 1)
+			g_snprintf (detail, sizeof detail, _("%d sessions allowed • %d total sessions"), allowed_skip_sessions, total_sessions);
+		else
+			g_snprintf (detail, sizeof detail, _("%d classes allowed • %d total classes"), allowed_skip, total_classes);
+		adw_action_row_set_subtitle (ADW_ACTION_ROW (result_row), detail);
+		GtkWidget *status_image = gtk_image_new_from_icon_name ("emblem-ok-symbolic");
+		if (remaining < 0)
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "dialog-error-symbolic");
+		else if (remaining <= 2)
+			gtk_image_set_from_icon_name (GTK_IMAGE (status_image), "dialog-warning-symbolic");
+		adw_action_row_add_suffix (ADW_ACTION_ROW (result_row), status_image);
+		gtk_list_box_append (self->results_list, result_row);
+
+		/* Update subject row subtitle + status */
+		{
+			char subbuf[128];
+			GtkWidget *subject_status = g_object_get_data (G_OBJECT (row), "status-image");
+			if (s->allowed_skips > 0)
+				g_snprintf (subbuf, sizeof subbuf, _("%d h/week • Skipped: %d • Remaining: %d"), s->weekly_hours, s->current_skips, remaining);
+			else
+				g_snprintf (subbuf, sizeof subbuf, _("%d h/week"), s->weekly_hours);
+			adw_action_row_set_subtitle (ADW_ACTION_ROW (row), subbuf);
+			if (GTK_IS_WIDGET (subject_status)) {
+				if (remaining < 0)
+					gtk_image_set_from_icon_name (GTK_IMAGE (subject_status), "dialog-error-symbolic");
+				else if (remaining <= 2)
+					gtk_image_set_from_icon_name (GTK_IMAGE (subject_status), "dialog-warning-symbolic");
+				else
+					gtk_image_set_from_icon_name (GTK_IMAGE (subject_status), "emblem-ok-symbolic");
+			}
+		}
+
 		total_allowed_all += allowed_skip;
 		total_classes_all += total_classes;
-		
-		/* Create result row with two-line layout */
-		result_row = gtk_list_box_row_new ();
-		result_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 3);
-		
-		if (session_hours > 1) {
-			g_snprintf (buf, sizeof buf, _("%s: %d sessions allowed (of %d total)"), 
-				s->name, allowed_skip_sessions, total_sessions);
-		} else {
-			g_snprintf (buf, sizeof buf, _("%s: %d classes allowed (of %d total)"), 
-				s->name, allowed_skip, total_classes);
-		}
-		
-		lbl_main = gtk_label_new (buf);
-		gtk_label_set_xalign (GTK_LABEL (lbl_main), 0.0);
-		gtk_widget_add_css_class (lbl_main, "heading");
-		
-		remaining = s->allowed_skips - s->current_skips;
-		g_snprintf (detail, sizeof detail, _("Current skips: %d | Remaining: %d"), s->current_skips, remaining);
-		lbl_detail = gtk_label_new (detail);
-		gtk_label_set_xalign (GTK_LABEL (lbl_detail), 0.0);
-		gtk_widget_add_css_class (lbl_detail, "caption");
-		if (remaining < 0)
-			gtk_widget_add_css_class (lbl_detail, "error");
-		else if (remaining <= 2)
-			gtk_widget_add_css_class (lbl_detail, "warning");
-		else
-			gtk_widget_add_css_class (lbl_detail, "success");
-		
-		gtk_box_append (GTK_BOX (result_box), lbl_main);
-		gtk_box_append (GTK_BOX (result_box), lbl_detail);
-		gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (result_row), result_box);
-		gtk_list_box_append (self->results_list, result_row);
-		
-		/* Update the skip label in the subject row */
-		subject_box = gtk_list_box_row_get_child (GTK_LIST_BOX_ROW (row));
-		skip_label = g_object_get_data (G_OBJECT (subject_box), "skip-label");
-		if (skip_label) {
-			g_snprintf (skip_buf, sizeof skip_buf, _("Skipped: %d | Remaining: %d"), s->current_skips, remaining);
-			gtk_label_set_text (GTK_LABEL (skip_label), skip_buf);
-			
-			gtk_widget_remove_css_class (skip_label, "success");
-			gtk_widget_remove_css_class (skip_label, "warning");
-			gtk_widget_remove_css_class (skip_label, "error");
-			if (remaining < 0)
-				gtk_widget_add_css_class (skip_label, "error");
-			else if (remaining <= 2)
-				gtk_widget_add_css_class (skip_label, "warning");
-			else
-				gtk_widget_add_css_class (skip_label, "success");
-		}
 	}
 	if (total_classes_all > 0) {
 		char summary[256];
@@ -445,7 +415,12 @@ recalc_results (ClasslimitWindow *self)
 		gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (summary_row), summary_box);
 		gtk_list_box_prepend (self->results_list, summary_row);
 	}
-	gtk_revealer_set_reveal_child (self->results_revealer, TRUE);
+	/* Show results list on results page */
+	gtk_stack_set_visible_child (self->results_stack, GTK_WIDGET (self->results_list));
+	adw_view_stack_set_visible_child (self->view_stack, self->results_page);
+	
+	/* Re-enable button after calculation */
+	gtk_widget_set_sensitive (GTK_WIDGET (self->calculate_button), TRUE);
 }
 
 static void
@@ -501,15 +476,22 @@ load_subjects_from_settings (ClasslimitWindow *self)
 		row = create_subject_row (s, self);
 		gtk_list_box_append (self->subjects_list, row);
 		
-		/* Update skip label if we have calculated data */
-		if (s->allowed_skips > 0) {
-			GtkWidget *box = gtk_list_box_row_get_child (GTK_LIST_BOX_ROW (row));
-			GtkWidget *skip_label = g_object_get_data (G_OBJECT (box), "skip-label");
-			if (skip_label) {
-				char buf[64];
+		/* Initialize subtitle with current skip state */
+		{
+			char subtitle[128];
+			if (s->allowed_skips > 0) {
 				int remaining = s->allowed_skips - s->current_skips;
-				g_snprintf (buf, sizeof buf, _("Skipped: %d | Remaining: %d"), s->current_skips, remaining);
-				gtk_label_set_text (GTK_LABEL (skip_label), buf);
+				g_snprintf (subtitle, sizeof subtitle, _("%d h/week • Skipped: %d • Remaining: %d"), weekly_hours, current_skips, remaining);
+			} else {
+				g_snprintf (subtitle, sizeof subtitle, _("%d h/week • Skipped: %d"), weekly_hours, current_skips);
+			}
+			adw_action_row_set_subtitle (ADW_ACTION_ROW (row), subtitle);
+			GtkWidget *status = g_object_get_data (G_OBJECT (row), "status-image");
+			if (GTK_IS_WIDGET (status)) {
+				if (s->allowed_skips == 0)
+					gtk_image_set_from_icon_name (GTK_IMAGE (status), "view-statistics-symbolic");
+				else
+					gtk_image_set_from_icon_name (GTK_IMAGE (status), "emblem-ok-symbolic");
 			}
 		}
 	}
@@ -538,7 +520,8 @@ on_reset_all_action (GSimpleAction *action, GVariant *parameter, gpointer user_d
 	
 	/* Clear results */
 	clear_results (self);
-	gtk_revealer_set_reveal_child (self->results_revealer, FALSE);
+	gtk_stack_set_visible_child (self->results_stack, gtk_widget_get_first_child (GTK_WIDGET (self->results_stack)));
+	adw_view_stack_set_visible_child_name (self->view_stack, "subjects");
 	
 	/* Reset spin buttons to defaults */
 	gtk_spin_button_set_value (self->percent_spin, 80);
@@ -743,7 +726,7 @@ classlimit_window_class_init (ClasslimitWindowClass *klass)
 	GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
 	gtk_widget_class_set_template_from_resource (widget_class, "/com/tomasps/classlimit/classlimit-window.ui");
-	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, main_box);
+	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, view_stack);
 	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, subjects_list);
 	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, subject_name_entry);
 	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, subject_hours_spin);
@@ -752,8 +735,42 @@ classlimit_window_class_init (ClasslimitWindowClass *klass)
 	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, weeks_spin);
 	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, session_hours_spin);
 	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, calculate_button);
-	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, results_revealer);
+	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, results_stack);
 	gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, results_list);
+    gtk_widget_class_bind_template_child (widget_class, ClasslimitWindow, results_page);
+}
+
+static void
+on_onboarding_close (AdwDialog *dialog, gpointer user_data)
+{
+	ClasslimitWindow *self = CLASSLIMIT_WINDOW (user_data);
+	g_settings_set_boolean (self->settings, "onboarding-completed", TRUE);
+}
+
+static void
+show_onboarding_if_needed (ClasslimitWindow *self)
+{
+	gboolean onboarding_completed;
+	GtkBuilder *builder;
+	AdwDialog *dialog;
+	GtkButton *get_started_button;
+	
+	onboarding_completed = g_settings_get_boolean (self->settings, "onboarding-completed");
+	
+	if (onboarding_completed)
+		return;
+	
+	builder = gtk_builder_new_from_resource ("/com/tomasps/classlimit/onboarding-dialog.ui");
+	dialog = ADW_DIALOG (gtk_builder_get_object (builder, "onboarding_dialog"));
+	get_started_button = GTK_BUTTON (gtk_builder_get_object (builder, "get_started_button"));
+	
+	g_signal_connect_swapped (get_started_button, "clicked", 
+		G_CALLBACK (adw_dialog_close), dialog);
+	g_signal_connect (dialog, "closed", 
+		G_CALLBACK (on_onboarding_close), self);
+	
+	adw_dialog_present (dialog, GTK_WIDGET (self));
+	g_object_unref (builder);
 }
 
 static void
@@ -776,10 +793,6 @@ classlimit_window_init (ClasslimitWindow *self)
 	g_signal_connect (self->calculate_button, "clicked", G_CALLBACK (on_calculate_clicked), self);
 	
 	/* Auto-save on changes */
-	g_signal_connect_swapped (self->subjects_list, "row-inserted", 
-		G_CALLBACK (save_subjects_to_settings), self);
-	g_signal_connect_swapped (self->subjects_list, "row-deleted", 
-		G_CALLBACK (save_subjects_to_settings), self);
 	g_signal_connect_swapped (self->percent_spin, "value-changed", 
 		G_CALLBACK (save_subjects_to_settings), self);
 	g_signal_connect_swapped (self->weeks_spin, "value-changed", 
@@ -799,4 +812,7 @@ classlimit_window_init (ClasslimitWindow *self)
 	import_action = g_simple_action_new ("import", NULL);
 	g_signal_connect (import_action, "activate", G_CALLBACK (on_import_action), self);
 	g_action_map_add_action (G_ACTION_MAP (self), G_ACTION (import_action));
+	
+	/* Show onboarding if this is first launch */
+	g_idle_add_once ((GSourceOnceFunc) show_onboarding_if_needed, self);
 }

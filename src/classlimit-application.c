@@ -48,15 +48,25 @@ static void
 classlimit_application_activate (GApplication *app)
 {
 	GtkWindow *window;
+	GtkCssProvider *css_provider;
 
 	g_assert (CLASSLIMIT_IS_APPLICATION (app));
 
 	window = gtk_application_get_active_window (GTK_APPLICATION (app));
 
-	if (window == NULL)
+	if (window == NULL) {
 		window = g_object_new (CLASSLIMIT_TYPE_WINDOW,
 		                       "application", app,
 		                       NULL);
+		
+		/* Load custom CSS */
+		css_provider = gtk_css_provider_new ();
+		gtk_css_provider_load_from_resource (css_provider, "/com/tomasps/classlimit/style.css");
+		gtk_style_context_add_provider_for_display (gtk_widget_get_display (GTK_WIDGET (window)),
+		                                             GTK_STYLE_PROVIDER (css_provider),
+		                                             GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+		g_object_unref (css_provider);
+	}
 
 	gtk_window_present (window);
 }
@@ -78,7 +88,7 @@ classlimit_application_about_action (GSimpleAction *action,
                                      GVariant      *parameter,
                                      gpointer       user_data)
 {
-	static const char *developers[] = {"Unknown", NULL};
+	static const char *developers[] = {"Tomas Palma Sanchez", NULL};
 	ClasslimitApplication *self = user_data;
 	GtkWindow *window = NULL;
 

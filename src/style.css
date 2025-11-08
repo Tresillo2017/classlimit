@@ -1,0 +1,30 @@
+/* ClassLimit Custom Styles */
+
+/* Subtle transitions for interactive elements (HIG-friendly) */
+button, spinbutton, entry, row {
+  transition: background-color 160ms ease-in-out, color 160ms ease-in-out, opacity 160ms ease-in-out;
+}
+
+/* Smooth opacity transitions */
+revealer > * {
+  transition: opacity 300ms ease-in-out;
+}
+
+/* Remove heavy card shadows for a cleaner look */
+
+/* Animate list items */
+list > row {
+  transition: background-color 200ms ease-in-out, opacity 300ms ease-in-out;
+}
+
+/* No pulsing animations to stay consistent with GNOME HIG */
+
+/* Keep focus transitions minimal */
+entry:focus {
+  transition: background-color 160ms ease-in-out, color 160ms ease-in-out;
+}
+
+/* Color transitions for status labels */
+.success, .warning, .error {
+  transition: color 300ms ease-in-out, background-color 300ms ease-in-out;
+}
